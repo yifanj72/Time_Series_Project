@@ -1,0 +1,399 @@
+---
+title: "TS-Final Project-VAR"
+output: html_document
+---
+
+```{r}
+suppressWarnings(suppressMessages(library(fpp)))
+suppressMessages(library(tseries))
+suppressMessages(library(ggplot2))
+suppressMessages(library(forecast))
+suppressMessages(library(MuMIn))
+suppressMessages(library(Metrics))
+suppressMessages(library(MLmetrics))
+suppressMessages(library(SciViews))
+suppressMessages(library(TSA))
+suppressMessages(library(vars))
+suppressMessages(library(tidyverse))
+suppressMessages(library(dplyr))
+suppressMessages(library(prophet))
+```
+
+
+```{r}
+Wanliu_data_daily <- read.csv(file = '/Users/amyzhang/Desktop/MScA/MSCA 31006/Project/Wanliu_data_daily.csv')
+head(Wanliu_data_daily)
+```
+
+```{r}
+PM2.5 <- Wanliu_data_daily$PM2.5
+TEMP <- Wanliu_data_daily$TEMP
+PRES <- Wanliu_data_daily$PRES
+RAIN <- Wanliu_data_daily$RAIN
+```
+
+```{r}
+# Plot the time series from 2013 March to 2014 December
+daily_PM_2.5 <- ts(PM2.5, start = 2013.3, end = 2014.3, frequency = 365)
+tsdisplay(daily_PM_2.5)
+```
+
+```{r}
+# Create a daily Date object
+inds <- seq(as.Date("2013-03-01"), as.Date("2017-02-28"), by = "day")
+```
+
+```{r}
+ts_pm <- ts(PM2.5, start = c(2013, as.numeric(format(inds[1], "%j"))), frequency = 365)
+ts_temp <- ts(TEMP, start = c(2013, as.numeric(format(inds[1], "%j"))), frequency = 365)
+ts_pres <- ts(PRES, start = c(2013, as.numeric(format(inds[1], "%j"))), frequency = 365)
+ts_rain <- ts(RAIN, start = c(2013, as.numeric(format(inds[1], "%j"))), frequency = 365)
+```
+
+```{r}
+lambda_pm2.5 <- BoxCox.lambda(ts_pm)
+lambda_pm2.5
+
+lambda_temp <- BoxCox.lambda(ts_temp)
+lambda_temp
+
+lambda_pres <- BoxCox.lambda(ts_pres)
+lambda_pres
+
+lambda_pres <- BoxCox.lambda(ts_rain)
+lambda_pres
+```
+
+
+```{r}
+# Take first diff for pm 2.5 to get rid of non-stationary
+pm_d1 <- diff(ts_pm, differences=1)
+autoplot(ts_pm, main='PM 2.5')
+autoplot(pm_d1, main='PM 2.5 (Differenced)')
+
+temp_d1 <- diff(ts_temp, differences=1)
+autoplot(temp_d1, main='Temp (Differenced)')
+
+pres_d1 <- diff(ts_pres, differences=1)
+autoplot(pres_d1, main='Pressure (Differenced)')
+
+rain_d1 <- diff(ts_rain, differences=1)
+autoplot(rain_d1, main='Pressure (Differenced)')
+```
+
+```{r}
+# Box-Cox Transformation for temparature ==> Yes
+ts.plot(ts_pm)
+ts.plot(BoxCox(ts_pm, lambda_pm2.5))
+
+qqnorm(ts_pm, main=expression(Normal~~Q-Q~~Plot))
+qqline(ts_pm)
+
+qqnorm(BoxCox(ts_pm, lambda_pm2.5),main=expression(Normal~~Q-Q~~Plot))
+qqline(BoxCox(ts_pm, lambda_pm2.5))
+
+hist(ts_pm)
+hist(BoxCox(ts_pm, lambda_pm2.5))
+```
+
+```{r}
+# Box-Cox Transformation for temparature ==> No, lambda is small, and normality decreased
+autoplot(ts_temp)
+autoplot(BoxCox(ts_temp, lambda_temp))
+
+qqnorm(ts_temp, main=expression(Normal~~Q-Q~~Plot))
+qqline(ts_temp)
+
+qqnorm(BoxCox(ts_temp, lambda_temp),main=expression(Normal~~Q-Q~~Plot))
+qqline(BoxCox(ts_temp, lambda_temp))
+```
+
+```{r}
+# Box-Cox Transformation for pressure ==> No, didn't change much
+autoplot(ts_pres)
+autoplot(BoxCox(ts_pres, lambda_pres))
+
+qqnorm(ts_pres, main=expression(Normal~~Q-Q~~Plot))
+qqline(ts_pres)
+
+qqnorm(BoxCox(ts_pres, lambda_pres),main=expression(Normal~~Q-Q~~Plot))
+qqline(BoxCox(ts_pres, lambda_pres))
+
+hist(ts_pres)
+hist(BoxCox(ts_pres, lambda_pres))
+```
+
+```{r}
+# Box-Cox Transformation for rain ==> No, it's mess
+autoplot(ts_rain)
+
+qqnorm(ts_rain, main=expression(Normal~~Q-Q~~Plot))
+qqline(ts_rain)
+
+hist(ts_rain)
+```
+
+```{r}
+# Apply decompose function and visualize
+fit_pm <- decompose(ts_pm, type="additive")
+plot(fit_pm)
+
+fit_temp <- decompose(ts_temp, type="additive")
+plot(fit_temp)
+
+fit_pres <- decompose(ts_pres, type="additive")
+plot(fit_pres)
+
+fit_train <- decompose(ts_rain, type="additive")
+plot(fit_train)
+```
+
+
+```{r}
+# Time Series plot of original data
+tsdisplay(ts_pm)
+tsdisplay(ts_temp)
+tsdisplay(ts_pres)
+tsdisplay(ts_rain)
+```
+
+```{r}
+# Hypothesis Testing: ADF/KPSS Level/KPSS Trend
+adf.test(ts_pm) # p-value < 0.05 ==> Reject NULL hypothesis ==> stationary
+adf.test(ts_temp) # p-value > 0.05 ==> Acccept NULL hypothesis ==> non-stationary
+adf.test(ts_pres) # p-value > 0.05 ==> Acccept NULL hypothesis ==> non-stationary
+
+kpss.test(ts_pm) # p-value < 0.05 ==> Reject NULL hypothesis ==> non-stationary
+kpss.test(ts_temp) # p-value < 0.05 ==> Reject NULL hypothesis ==> non-stationary
+kpss.test(ts_pres) # p-value < 0.05 ==> Reject NULL hypothesis ==> non-stationary
+
+kpss.test(ts_pm, null = "Trend") # p-value > 0.05 ==> Accept NULL hypothesis ==> stationary
+kpss.test(ts_temp, null = "Trend") # p-value < 0.05 ==> Reject NULL hypothesis ==> non-stationary
+kpss.test(ts_pres, null = "Trend") # p-value < 0.05 ==> Reject NULL hypothesis ==> non-stationary
+```
+
+```{r}
+adf.test(ts_rain) # p-value < 0.05 ==> Reject NULL hypothesis ==> stationary
+kpss.test(ts_rain) # p-value > 0.05 ==> Accept NULL hypothesis non-stationary
+kpss.test(ts_rain, null = "Trend") # p-value > 0.05 ==> Accept NULL hypothesis ==> stationary
+```
+
+# VAR model
+```{r}
+x = cbind(ts_pm, ts_temp, ts_pres)
+plot.ts(x, main = "PM 2.5, Temperature, and Pressure (Logged)", xlab = "Time")
+```
+
+```{r}
+x = cbind(ts_pm, ts_temp, ts_pres)
+VARselect(x, lag.max = 10, type = 'both')$selection
+```
+
+# The R output shows the lag length selected by each of the information criteria available in the vars package. There is a large discrepancy between the VAR(5) selected by the AIC and the VAR(3) selected by the BIC.
+
+# As a result, we first fit a VAR(5), as selected by the AIC, and VAR(3) selected by the BIC.
+# For each model we test that the residuals are uncorrelated using a Portmanteau test.
+# The null hypothesis of no serial correlation in the residuals is rejected for both VAR(5) and a VAR(3), so we continue to VAR(6)
+
+```{r}
+#x_df = cbind(ts_pm, ts_temp, ts_pres, ts_rain)
+fit1 <- VAR(x, p=5, type="both")
+serial.test(fit1, lags.pt = 10, type="PT.asymptotic")
+fit2 <- VAR(x, p=3, type="both")
+serial.test(fit2, lags.pt = 10, type="PT.asymptotic")
+summary(fit2)
+```
+
+```{r}
+var6 <- VAR(x, p=6, type="both")
+serial.test(var6, lags.pt = 10, type="PT.asymptotic")
+```
+
+```{r}
+summary(var6)
+```
+
+```{r}
+pm_d1 <- diff(PM2.5, differences=1)
+temp_d1 <- diff(TEMP, differences=1)
+pres_d1 <- diff(PRES, differences=1)
+x_df <- cbind(pm_d1, temp_d1, pres_d1)
+var9 <- VAR(x_df, p=10, type="both")
+VARselect(x_df, lag.max = 10, type = "both")$selection
+serial.test(var9, lags.pt = 10, type="PT.asymptotic")
+#summary(var9)
+```
+
+```{r}
+forecast(var6) %>%
+  autoplot() + xlab("Year")
+```
+
+```{r}
+f <- forecast(var6, h=30) %>% autoplot() + coord_cartesian(xlim = c(2016.1,2017.2438))
+f
+```
+
+## Ignore the below since we're only for differenced data ###
+```{r}
+# Predict
+# pred1 <- predict(fit1, n.ahead = 30)
+# pred2 <- predict(fit2, n.ahead = 30)
+
+# Inverse difference prediction for PM 2.5
+# pred1_inv_pm <- diffinv(pred1$fcst$pm_d1[, 1], xi = ts_pm[seq_len(1)])
+# pred2_inv_pm <- diffinv(pred2$fcst$pm_d1[, 1], xi = ts_pm[seq_len(1)])
+
+# Inverse difference prediction for temperature
+# pred1_inv_tp <- diffinv(pred1$fcst$temp_d1[, 1], xi = mean(ts_temp))
+# pred2_inv_tp <- diffinv(pred2$fcst$temp_d1[, 1], xi = ts_temp[seq_len(1)])
+
+# Inverse difference prediction for pressure
+# pred1_inv_ps <- diffinv(pred1$fcst$pres_d1[, 1], xi = ts_pres[seq_len(1)])
+# pred2_inv_ps <- diffinv(pred2$fcst$pres_d1[, 1], xi = ts_pres[seq_len(1)])
+
+# Do not need to inverse diff for rain
+# pred1_inv_rn <- pred1$fcst$ts_rain_2[, 1]
+# pred2_inv_rn <- pred2$fcst$ts_rain_2[, 1]
+
+# pred1_inv_pm_ts <- ts(pred1_inv_pm, start = c(2017, as.numeric(format(as.Date("2017-03-30"), "%j"))), frequency = 365)
+# ts.plot(cbind(window(ts_pm), pred1_inv_pm_ts), lty = 1:2)
+# title("PM2.5 forecast with VAR(9)")
+
+# pred1_inv_tp_ts <- ts(pred1_inv_tp, start = c(2017, as.numeric(format(as.Date("2017-03-30"), "%j"))), frequency = 365)
+# ts.plot(cbind(window(ts_temp), pred1_inv_tp_ts), lty = 1:2)
+# title("PM2.5 forecast with VAR(9)")
+
+# pred1_inv_ps_ts <- ts(pred1_inv_ps, start = c(2017, as.numeric(format(as.Date("2017-03-30"), "%j"))), frequency = 365)
+# ts.plot(cbind(window(ts_pres), pred1_inv_ps_ts), lty = 1:2)
+# title("PM2.5 forecast with VAR(9)")
+
+# pred1_inv_ps_rn <- ts(pred1_inv_rn, start = c(2017, as.numeric(format(as.Date("2017-03-30"), "%j"))), frequency = 365)
+# ts.plot(cbind(window(ts_rain_2), pred1_inv_ps_rn), lty = 1:2)
+# title("PM2.5 forecast with VAR(9)")
+
+###Plots for VAR(3) model###
+# pred2_inv_pm_ts <- ts(pred2_inv_pm, start = c(2017, as.numeric(format(as.Date("2017-03-30"), "%j"))), frequency = 365)
+# ts.plot(cbind(window(ts_pm), pred2_inv_pm_ts), lty = 1:2)
+# title("PM2.5 forecast with VAR(3)")
+
+# pred2_inv_tp_ts <- ts(pred2_inv_tp, start = c(2017, as.numeric(format(as.Date("2017-03-30"), "%j"))), frequency = 365)
+# ts.plot(cbind(window(ts_temp), pred2_inv_tp_ts), lty = 1:2)
+# title("PM2.5 forecast with VAR(3)")
+
+# pred2_inv_ps_ts <- ts(pred2_inv_ps, start = c(2017, as.numeric(format(as.Date("2017-03-30"), "%j"))), frequency = 365)
+# ts.plot(cbind(window(ts_pres), pred2_inv_ps_ts), lty = 1:2)
+# title("PM2.5 forecast with VAR(3)")
+
+# pred2_inv_ps_rn <- ts(pred2_inv_rn, start = c(2017, as.numeric(format(as.Date("2017-03-30"), "%j"))), frequency = 365)
+# ts.plot(cbind(window(ts_rain_2), pred2_inv_ps_rn), lty = 1:2)
+# title("PM2.5 forecast with VAR(3)")
+```
+
+
+```{r}
+# Time Series Plot of residuals of VAR(9)
+ts.plot(resid(fit3)[, 1])
+ts.plot(resid(fit3)[, 2])
+ts.plot(resid(fit3)[, 3])
+
+# ACF Plot of residuals of VAR(9)
+acf(resid(fit3)[, 1])
+acf(resid(fit3)[, 2])
+acf(resid(fit3)[, 3])
+
+# PACF Plot of residuals of VAR(9)
+pacf(resid(fit3)[, 1])
+pacf(resid(fit3)[, 2])
+pacf(resid(fit3)[, 3])
+
+# Histogram of residuals of VAR(9)
+hist(resid(fit3)[, 1])
+hist(resid(fit3)[, 2])
+hist(resid(fit3)[, 3])
+```
+
+
+### CV begins here ###
+```{r}
+data <- read.csv(file = '/Users/amyzhang/Desktop/MScA/MSCA 31006/Project/Wanliu_data_daily.csv')
+#firstHour <- 24*(as.Date("2013-03-01 00:00:00")-as.Date("2013-1-1 00:00:00"))
+data_ts <- ts(data=data[c('PM2.5', 'PRES', 'TEMP', 'RAIN')], start=c(2013,3), frequency=365.25)
+
+PM2.5 <- data_ts[, 'PM2.5']
+TEMP <- data_ts[, 'TEMP']
+PRES <- data_ts[, 'PRES']
+
+x = cbind(PM2.5, TEMP, PRES)
+
+# CV
+k=1381
+h=30
+p=365.25
+n <- length(PM2.5)
+
+st <- tsp(PM2.5)[1]+(k-2)/p #  gives the start time in time units,
+
+error_1_var <- matrix(NA,n-k,h)
+error_2_var <- matrix(NA,n-k,h)
+
+AIC_1_var <- matrix(NA,n-k)
+AIC_2_var <- matrix(NA,n-k)
+
+i<-1
+
+for(i in (1:80))
+{
+  ### One Month rolling forecasting
+  # Expanding Window 
+  train_1 <- window(x, end=st + i/p)  ## Window Length: k+i
+  
+  # Sliding Window - keep the training window of fixed length. 
+  # The training set always consists of k observations.
+  train_2 <- window(x, start=st+(i-k+1)/p, end=st+i/p) ## Window Length: k
+  test <- window(PM2.5, start=st + (i+1)/p, end=st + (i+h)/p) ## Window Length: H
+  
+  if (i<4) {
+    cat(c("*** CV", i,":","len(Expanding Window):",length(train_1), "len(Sliding Window):",length(train_2), "len(Test):",length(test),'\n'  ))
+    cat(c("*** TRAIN -  Expanding WIndow:",tsp(train_1)[1],'-',tsp(train_1)[2],'\n'))
+    cat(c("*** TRAIN - Sliding WIndow:",tsp(train_2)[1],'-',tsp(train_2)[2],'\n'))
+    #cat(c("*** TEST:",tsp(test)[1],'-',tsp(test)[2],'\n'))
+    cat("*************************** \n \n")
+  }
+
+  # M1 - VAR(6) with expanding window
+  fit_1 <- VAR(train_1, p=6, type="both")
+  fcast_1 <- forecast(fit_1, h=h)
+  fcast_1_p <- predict(fit_1, n.ahead=h)
+  
+  mean_1 <- fcast_1_p$fcst$PM2.5[,1]
+  #fcast_1_ts <- ts(mean_1, start = c(2020, 242), end = c(2020, 271), frequency = 365.25)
+  
+  s1 <- summary(fit_1)
+  
+  # M2 -VAR(6) with sliding window
+  fit_2 = VAR(train_2, p=6, type='both')
+  fcast_2 <- forecast(fit_2, h=h)
+  fcast_2_p <- predict(fit_2, n.ahead=h)
+  
+  mean_2 <- fcast_2_p$fcst$PM2.5[,1]
+  #fcast_2_ts <- ts(mean_2, start = c(2020, 242), end = c(2020, 271), frequency = 365.25)
+  
+  s2 <- summary(fit_2)
+  error_1_var[i,1:length(test)] <- mean_1[1:length(test)] - test
+  
+  error_2_var[i,1:length(test)] <- mean_2[1:length(test)] - test
+  
+  AIC_1_var[i, 1] <- ln(det(s1$covres)) + (2*p*k^2)/n
+  AIC_2_var[i, 1] <- ln(det(s2$covres)) + (2*p*k^2)/n
+  i<-i+1
+}
+
+```
+
+#[1]  73.625000  39.416667  93.500000 162.541667 236.666667  13.250000  14.291667  83.541667  33.125000
+[10]   5.437500   5.375000  45.583333  99.750000  78.708333 187.208333 241.250000 117.354167  21.333333
+[19]  87.333333  97.416667  10.479167  58.020833  72.333333  15.916667  21.458333   8.250000  27.125000
+[28]  64.000000   9.958333
+
+ 
