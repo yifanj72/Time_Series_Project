@@ -40,3 +40,8 @@
 * Try using different tools:
   * Meta has an interesting library - Prophet
   * Get some experience with Python time series (for practice)
+## Files
+* Arima_with_CrossValidation.R
+* Regression_with_Arima Errors_with_CV.R
+* TBAT_with_CrossValidation.R
+* VAR_with_CrossValidation_last.Rmd
